@@ -79,7 +79,16 @@
     return null;
   }
   const loopVideo = (v, ex, cls) => `<video class="${cls || ""}" autoplay muted loop playsinline disablepictureinpicture preload="metadata" poster="${v.poster}" aria-label="${esc(altOf(ex))}"><source src="${v.src}" type="video/mp4"></video>`;
-  const altOf = (ex) => ex.alt || `${ex.name} — ilustracja ćwiczenia`;
+  // v1.3.8: nowe filmy — Zając (m), Marta i Oliwka (k); opis dla czytników ekranu musi pasować do postaci na filmie
+  const NEWCHAR = {
+    m: new Set("airsquat pushup negpull deadlift dbpress hammer dip hollow bwlunge kbswing goblet plank pike calf burpee dbrow bench legraise".split(" ")),
+    k: { oliwka: new Set("rope airsquat plank stepup hollow inclinepush".split(" ")), marta: new Set("squat hipthrust bwlunge glutebridge pullup pushup rdl dbpress goblet kickback abduction sumo bulgarian ohp dbrow legraise latpull kbswing".split(" ")) },
+  };
+  function newChar(ex) {
+    if (S.sex === "m") return NEWCHAR.m.has(ex.id) ? "Zając" : "";
+    return NEWCHAR.k.oliwka.has(ex.id) ? "Oliwka" : NEWCHAR.k.marta.has(ex.id) ? "Marta" : "";
+  }
+  const altOf = (ex) => { const c = newChar(ex); return c ? `${ex.name} — ${c} pokazuje ćwiczenie` : (ex.alt || `${ex.name} — ilustracja ćwiczenia`); };
   function still(ex, who) { return `img/ex/${ex.id}-${who}.jpg`; }
   function stillSrc(ex) {
     if (S.sex === "k" && IMG.k.has(ex.id)) return still(ex, "k");
