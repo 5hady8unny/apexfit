@@ -42,6 +42,12 @@
 </style>
 </head>
 <body>
+<script>/* Nowy adres aplikacji — baner tylko na starym adresie github.io */
+(function(){if(!/github\.io$/.test(location.hostname))return;var NEW="https://app.apexfit.workers.dev/";
+var b=document.createElement("div");b.style.cssText="position:fixed;left:0;right:0;top:0;z-index:99999;padding:calc(env(safe-area-inset-top,0px) + 8px) 12px 8px;background:#f4c542;color:#111;font:600 13px/1.3 system-ui,sans-serif;text-align:center";
+b.innerHTML='ApexFit ma nowy adres: <a href="'+NEW+'" style="color:#111;text-decoration:underline">app.apexfit.workers.dev</a> <span style="font-weight:400">(dane zapisane tutaj nie przenoszą się automatycznie)</span>';
+document.addEventListener("DOMContentLoaded",function(){document.body.appendChild(b)});})();
+</script>
 <div id="splash" role="img" aria-label="ApexFit — Your training crew: Rico, Pitbull, Zając, Atena, Łapka, Marta i Oliwka">
   <div class="sp-bg"></div>
   <div class="sp-top"><h1>ApexFit</h1><p>Your training crew</p></div>
