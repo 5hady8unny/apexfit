@@ -1,0 +1,11 @@
+/* ApexFit PWA — style dodatków webowych */
+#ios-hint { position: fixed; left: max(12px, env(safe-area-inset-left, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 92px); z-index: 90; display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border-radius: 18px; background: rgba(28, 28, 34, .96); border: 1px solid rgba(255, 255, 255, .16); box-shadow: 0 12px 34px rgba(0, 0, 0, .55); color: #f5f5f7; max-width: 520px; margin: 0 auto; animation: ih-in .35s ease both; }
+#ios-hint .ih-ic { flex: none; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: rgba(48, 209, 88, .16); color: #30d158; }
+#ios-hint .ih-tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: .92rem; line-height: 1.3; }
+#ios-hint .ih-tx small { color: #b8bcc6; font-size: .8rem; line-height: 1.35; }
+#ios-hint .ih-tx i { font-style: normal; color: #f5f5f7; font-weight: 600; }
+#ios-hint .ih-x { flex: none; width: 36px; height: 36px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, .1); color: #f5f5f7; font-size: 1rem; }
+body.is-fs #ios-hint { display: none; }
+@keyframes ih-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.web-pwa .as-web-note { color: #b8bcc6; }
