@@ -737,9 +737,9 @@
     return r;
   }
   async function aiSaveKey(raw) {
-    const AI = window.TWAI; let p = AI.cfg().prov; raw = String(raw || "").trim();
+    const AI = window.TWAI; let p = AI.cfg().prov; raw = AI.normKey(raw);
     if (!AI.keyLooksOk(raw)) { aiMsg(raw ? "To nie wygląda na klucz API (powinien być jednym ciągiem znaków bez spacji)." : "Schowek jest pusty. Skopiuj klucz na stronie usługi, a potem dotknij „Wklej”.", "err"); return; }
-    const guess = /^AIza/.test(raw) ? "gemini" : /^xai-/.test(raw) ? "grok" : /^sk-/.test(raw) ? "openai" : p;
+    const guess = /^(AIza|AQ\.)/.test(raw) ? "gemini" : /^xai-/.test(raw) ? "grok" : /^sk-/.test(raw) ? "openai" : p;
     if (guess !== p) { AI.setProv(guess); p = guess; }
     if (!AI.setKey(p, raw)) { aiMsg("Nie udało się zapisać klucza.", "err"); return; }
     const k = document.getElementById("ai-key"); if (k) k.value = "";
