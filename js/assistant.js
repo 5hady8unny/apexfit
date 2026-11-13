@@ -471,7 +471,7 @@
       if (typing && typing.parentNode) typing.parentNode.removeChild(typing);
       if (r.mood) { const av = chat && chat.querySelector(".as-av"); if (av) av.src = img(charOfDay(), r.mood); }
       let note = null;
-      if (r.err && !send.warned) { send.warned = true; note = r.err === "quota" ? "Limit AI wyczerpany — odpowiadam trybem offline." : r.err === "auth" ? "Klucz API nie działa — odpowiadam trybem offline. Sprawdź go w Ustawieniach." : r.err === "net" ? "Brak internetu — odpowiadam trybem offline." : "AI chwilowo niedostępne — odpowiadam trybem offline."; }
+      if (r.err && !send.warned) { send.warned = true; note = r.err === "quota" ? "Limit AI wyczerpany — odpowiadam trybem offline." : r.err === "auth" ? "Klucz API nie działa — odpowiadam trybem offline. Sprawdź go w Ustawieniach." : r.err === "timeout" ? "AI odpowiada zbyt wolno — odpowiadam trybem offline." : (r.err === "net" || r.err === "dns" || r.err === "ssl") ? "Nie udało się połączyć z AI — odpowiadam trybem offline. Szczegóły: Ustawienia → Sprawdź połączenie." : "AI chwilowo niedostępne — odpowiadam trybem offline."; }
       setTimeout(() => { addMsg("bot", r.text, r.links); if (note) addMsg("bot", note, null, true); }, useAI ? 0 : 280);
     });
   }

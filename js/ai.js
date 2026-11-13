@@ -49,8 +49,18 @@
     if (b && b.clipboardText) { try { return String(b.clipboardText() || ""); } catch (e) { return ""; } }
     try { return (await navigator.clipboard.readText()) || ""; } catch (e) { return ""; }
   }
-  // kody błędów: nokey, auth, quota, model, net, other
-  const ERR_TXT = { nokey: "Brak klucza API.", auth: "Klucz nie został przyjęty (sprawdź, czy jest poprawny i aktywny).", quota: "Limit zapytań wyczerpany albo konto bez środków. Spróbuj później.", model: "Model niedostępny dla tego klucza.", net: "Brak połączenia z internetem.",
+  // kody błędów: nokey, auth, quota, region, model, net, dns, timeout, ssl, blocked, empty, other
+  // fetch z limitem czasu 60 s (wolny model „myślący” nie jest już mylony z brakiem internetu)
+  async function tfetch(url, init) {
+    const ac = typeof AbortController === "function" ? new AbortController() : null; const t = ac ? setTimeout(() => ac.abort(), 60000) : 0;
+    try { return await fetch(url, ac ? Object.assign({ signal: ac.signal }, init) : init); } finally { if (t) clearTimeout(t); }
+  }
+  function netErr(e) {
+    const n = String((e && e.name) || "Error"), m = String((e && e.message) || "").replace(/key=[^&\s]+/g, "key=***").slice(0, 60);
+    if (n === "AbortError") return Object.assign(new Error("timeout"), { code: "timeout", detail: "TIMEOUT" });
+    return Object.assign(new Error("net"), { code: "net", detail: "FETCH: " + n + (m ? " " + m : "") });
+  }
+  const ERR_TXT = { nokey: "Brak klucza API.", auth: "Klucz nie został przyjęty (sprawdź, czy jest poprawny i aktywny).", quota: "Limit zapytań wyczerpany albo konto bez środków. Spróbuj później.", model: "Model niedostępny dla tego klucza.", net: "Nie udało się połączyć z usługą AI (sieć).", dns: "Nie można znaleźć serwera usługi AI (DNS). Sprawdź internet, VPN lub prywatny DNS w telefonie.", timeout: "Usługa AI odpowiada zbyt wolno (przekroczono czas). Spróbuj ponownie.", ssl: "Błąd bezpiecznego połączenia (SSL). Sprawdź datę i godzinę w telefonie, VPN lub program antywirusowy.",
     region: "Darmowy plan Gemini nie jest dostępny w Twoim kraju/regionie albo wymaga włączenia rozliczeń w Google AI Studio. Wybierz Grok lub ChatGPT.", blocked: "Usługa zablokowała tę odpowiedź (filtr bezpieczeństwa). Spróbuj inaczej sformułować pytanie.", empty: "Usługa AI zwróciła pustą odpowiedź.", other: "Usługa AI nie odpowiedziała poprawnie." };
   const errText = (code, detail) => (ERR_TXT[code] || ERR_TXT.other) + (detail ? " [" + detail + "]" : "");
   const pending = {}; let rid = 0;
@@ -68,7 +78,7 @@
     }
     if (!hasKey(prov)) return Promise.reject(Object.assign(new Error("nokey"), { code: "nokey" }));
     const b = NB();
-    if (b && b.aiAsk) return new Promise((res, rej) => { const id = "r" + (++rid); pending[id] = { res, rej }; try { b.aiAsk(id, prov, modelsFor(prov).join(","), sys, JSON.stringify(msgs)); } catch (e) { delete pending[id]; rej(Object.assign(e, { code: "other" })); } setTimeout(() => { if (pending[id]) { delete pending[id]; rej(Object.assign(new Error("net"), { code: "net" })); } }, 45000); });
+    if (b && b.aiAsk) return new Promise((res, rej) => { const id = "r" + (++rid); pending[id] = { res, rej }; try { b.aiAsk(id, prov, modelsFor(prov).join(","), sys, JSON.stringify(msgs)); } catch (e) { delete pending[id]; rej(Object.assign(e, { code: "other" })); } setTimeout(() => { if (pending[id]) { delete pending[id]; rej(Object.assign(new Error("timeout"), { code: "timeout", detail: "TIMEOUT-JS" })); } }, 150000); });
     return webAsk(prov, sys, msgs);
   }
   // ---- Gemini: parsowanie odpowiedzi (czysta funkcja — testowana na przykładowych JSON-ach) ----
@@ -116,7 +126,7 @@
       for (const think of [true, false]) {
         const headers = { "Content-Type": "application/json" }; let url = base;
         if (m === "hdr") headers["x-goog-api-key"] = key; else if (m === "qs") url += "?key=" + encodeURIComponent(key); else headers.Authorization = "Bearer " + key;
-        const r = await fetch(url, { method: "POST", headers, body: geminiBody(model, sys, msgs, think) });
+        const r = await tfetch(url, { method: "POST", headers, body: geminiBody(model, sys, msgs, think) });
         const out = parseGemini(r.status, await r.text(), key);
         if (out.code === "think" && think) continue;
         if (out.code === "auth") { lastAuth = out; break; }
@@ -137,7 +147,7 @@
         }
         const url = prov === "grok" ? "https://api.x.ai/v1/chat/completions" : "https://api.openai.com/v1/chat/completions";
         const init = { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key }, body: JSON.stringify({ model, messages: [{ role: "system", content: sys }].concat(msgs.map((m) => ({ role: m.r === "user" ? "user" : "assistant", content: m.t }))), max_completion_tokens: 800 }) };
-        const r = await fetch(url, init), tag = "HTTP " + r.status;
+        const r = await tfetch(url, init), tag = "HTTP " + r.status;
         if (r.status === 401 || r.status === 403) throw Object.assign(new Error("auth"), { code: "auth", detail: tag });
         if (r.status === 429 || r.status === 402) throw Object.assign(new Error("quota"), { code: "quota", detail: tag });
         if (r.status === 404 || r.status === 400) { let tx = ""; try { tx = await r.text(); } catch (e2) { /* brak */ } if (/incorrect api key|invalid[^"]{0,20}key/i.test(tx)) throw Object.assign(new Error("auth"), { code: "auth", detail: tag }); last = { code: "model", detail: tag }; continue; }
@@ -145,7 +155,7 @@
         const j = await r.json(); const t = (((j.choices || [])[0] || {}).message || {}).content;
         if (t && String(t).trim()) return String(t).trim();
         last = { code: "empty", detail: "pusta odpowiedź" };
-      } catch (e) { if (e.code) throw e; throw Object.assign(new Error("net"), { code: "net" }); }
+      } catch (e) { if (e.code) throw e; throw netErr(e); }
     }
     throw Object.assign(new Error(last.code === "model" ? "model" : "other"), { code: last.code === "model" ? "model" : last.code === "empty" ? "empty" : "other", detail: last.detail || "" });
   }
