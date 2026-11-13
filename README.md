@@ -28,7 +28,7 @@ Rozmowa z AI wymaga własnego klucza (Gemini, Grok lub ChatGPT) – klucz zapisu
 
 | Wersja | Plik | Opis |
 |---|---|---|
-| 1.3.8 | `apexfit-1.3.8.apk` | 42 nowe filmy ćwiczeń z Zającem, Martą i Oliwką (zamiast starszych klipów). |
+| 1.3.8 | `apexfit-1.3.8.apk` | 42 nowe filmy ćwiczeń z Zającem, Martą i Oliwką, własny głos każdego trenera (test głosu, wyciszenie) oraz poprawiona reakcja postaci na dotyk i przytrzymanie. |
 | 1.3.8-HQ | `apexfit-1.3.8-hq.apk` | To samo co 1.3.8, ale z animacjami 262×520 i filmami ćwiczeń 480×848 w pełnej jakości. |
 | 1.3.7 | `apexfit-1.3.7.apk` | Poprawka błędu „Brak połączenia z internetem” przy sprawdzaniu Gemini: dłuższe limity czasu dla wolnych modeli, brak sztucznego testu sieci i dokładne komunikaty błędów (DNS, przekroczenie czasu, SSL). |
 | 1.3.7-HQ | `apexfit-1.3.7-hq.apk` | To samo co 1.3.7, ale z animacjami 262×520 i filmami ćwiczeń 480×848 w pełnej jakości. |
