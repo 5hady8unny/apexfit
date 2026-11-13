@@ -14,6 +14,16 @@ Obie wersje mają ten sam identyfikator aplikacji i ten sam podpis, więc instal
 
 Wymagania: Android 7.0 (API 24) lub nowszy.
 
+## iPhone i przeglądarka (PWA)
+
+Wersja webowa działa bez instalowania z App Store: **https://5hady8unny.github.io/apexfit/**
+
+1. Otwórz link w Safari na iPhonie.
+2. Dotknij **Udostępnij** → **Do ekranu początkowego**. Aplikacja ApexFit pojawi się jak zwykła ikona i będzie działać na pełnym ekranie.
+3. Po pierwszym uruchomieniu większość aplikacji działa offline (filmy ćwiczeń zapisują się po pierwszym odtworzeniu).
+
+Rozmowa z AI wymaga własnego klucza (Gemini, Grok lub ChatGPT) – klucz zapisuje się tylko na Twoim urządzeniu. Funkcje wyłącznie androidowe (nakładka trenera na ekranie, mikrofon w tle) są w wersji webowej ukryte.
+
 ## Wersje
 
 | Wersja | Plik | Opis |
