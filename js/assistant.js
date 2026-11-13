@@ -41,7 +41,7 @@
       tap: ["Hej, hej! Pobawimy się w trening?", "Hop, hop! Jesteś super!", "Przytrzymaj mnie, to pogadamy!", "Piątka! Dasz radę!"],
       fallback: "Ojej, nie wiem, o co chodzi! Zapytaj mnie o trening na dziś, o jedzonko, kalorie albo jakieś ćwiczenie!" },
   };
-  const def = { on: true, voice: false, mute: false, mode: "text", overlay: false, pos: null, bx: null, first: 0, trainer: { m: "auto", k: "auto" } };
+  const def = { on: true, voice: false, mute: false, online: true, cues: true, mode: "text", overlay: false, pos: null, bx: null, first: 0, trainer: { m: "auto", k: "auto" } };
   let A = Object.assign({}, def, load(KEY));
   A.trainer = Object.assign({ m: "auto", k: "auto" }, A.trainer || {});
   const ROSTER = { m: ["rico", "pitbull", "zajac"], k: ["atena", "lapka", "marta", "oliwka"] };
@@ -423,11 +423,13 @@
     if (who === "bot" && !quiet && wantVoice()) speak(text);
   }
   // v1.3.5: odpowiedź AI (Gemini/Grok/ChatGPT) w roli trenera; bez klucza, offline lub przy błędzie/limicie — dotychczasowe odpowiedzi offline
-  const AIHIST = 12;
-  function aiSystem(voice) {
+  const AIHIST = 3; // v1.3.9: ostatnie 3 wymiany (6 wiadomości) — krótszy kontekst = szybsza odpowiedź
+  const CTX_RE = /trening|plan|kalor|jadlospis|diet|posil|sniadan|obiad|kolacj|bialk|wag[aei]|schud|masa|cwicz|serii|powtorz|dzis|jutro|tydzien|cel\b|progres|rozgrzew|regeneracj|odpoczyn|cardio|przysiad|pompk|brzuch|miesn|zalicz|ukonczo/;
+  function aiSystem(voice, q) {
     const c = C(), f = her(), t = TW(), S = t ? t.state() : {}, ch = charOfDay();
     let ctxTxt = "";
     try {
+      if (q !== undefined && !CTX_RE.test(norm(String(q)))) throw 0; // pytanie ogólne — kontekst planu nie jest potrzebny
       const tg = t.kcalTarget(), p = t.plan(), di = (new Date().getDay() + 6) % 7, d = p[di], w = S.week - 1;
       const names = d && d.type === "trening" ? d.slots.map((x) => exById(x.ex).name).join(", ") : "";
       const meals = t.dayPlan(w, di).meals.map((x) => `${x.label}: ${x.meal.name}`).join("; ");
@@ -437,13 +439,13 @@
         `Dziś (${d ? d.full : ""}): ${d ? (d.type === "trening" ? "trening „" + d.name + "” — " + names : d.type === "cardio" ? "dzień cardio" : "odpoczynek") : ""}.\nJadłospis na dziś: ${meals}.\n` +
         `Ukończone treningi w tym tygodniu: ${n}. Aktualny nastrój postaci: ${baseMood()}.`;
     } catch (e) { ctxTxt = ""; }
-    return `Jesteś ${c.name} — ${c.who}, ${f ? "trenerka" : "trener"} i asystent${f ? "ka" : ""} w aplikacji treningowej ApexFit. Charakter: ${c.style}. ${c.about}\n` +
-      `ZASADY: Zawsze odpowiadaj po polsku, jako ${c.name}, w ${f ? "rodzaju żeńskim" : "rodzaju męskim"}, zachowując swoją osobowość i rolę trenera. ` +
-      (voice ? "Twoja odpowiedź zostanie przeczytana na głos: maksymalnie 2–3 krótkie zdania (do 45 słów), prosty język, bez list, bez markdown, bez emotikon i znaków specjalnych. " : "Odpowiadaj zwięźle (zwykle 1–4 zdania, do 90 słów), bez markdown i bez emotikon; listy tylko gdy konieczne, zwykłym tekstem. ") +
-      `Odpowiadaj na każde pytanie (także spoza treningu), ale nawiązuj do planu użytkownika, gdy to pasuje. Nie wymyślaj danych o użytkowniku — korzystaj tylko z kontekstu poniżej. ` +
-      `BEZPIECZEŃSTWO: dawaj wyłącznie ogólne porady o treningu i żywieniu; nie stawiaj diagnoz, nie zalecaj leków, suplementów w dawkach ani diet wyniszczających; przy bólu, urazie, chorobie, ciąży lub zaburzeniach odżywiania zalecaj kontakt z lekarzem lub dietetykiem. Odmawiaj treści nieodpowiednich lub niebezpiecznych.` +
-      (ch === "oliwka" ? ` Jesteś małą zajączką — rozmowa musi być przyjazna dzieciom: bardzo prosty, ciepły i wesoły język, krótkie zdania, zero treści dla dorosłych, przemocy, diet odchudzających ani liczenia kalorii w negatywnym tonie; zachęcaj do ruchu jako zabawy i do rozmowy z rodzicem lub opiekunem w ważnych sprawach.` : "") +
-      `\n\nKONTEKST:\n${ctxTxt}`;
+    // v1.3.9: krótszy prompt (szybciej) — bez długiego „about”, kontekst planu tylko gdy pytanie go dotyczy
+    return `Jesteś ${c.name} — ${c.who}, ${f ? "przyjazna trenerka" : "przyjazny trener"} fitness w aplikacji ApexFit. Charakter: ${c.style}.\n` +
+      `Odpowiadaj po polsku, w ${f ? "rodzaju żeńskim" : "rodzaju męskim"}, w swoim stylu. Odpowiadaj dokładnie i pomocnie na KAŻDE pytanie — także spoza treningu (wiedza ogólna, historia, nauka, codzienne sprawy); nigdy nie odmawiaj tylko dlatego, że to nie fitness i nie mów, że „nie rozumiesz”. Jeśli nie wiesz, powiedz to uczciwie. ` +
+      (voice ? "Odpowiedź zostanie przeczytana na głos: 1–3 krótkie zdania (do 50 słów), bez list, markdownu i emotikon. " : "Odpowiadaj krótko: zwykle 2–3 zdania, bez markdownu i emotikon; dłużej tylko, gdy użytkownik prosi o szczegóły lub plan. ") +
+      `Możesz dodać lekki akcent fitnessowy lub humor, ale najpierw odpowiedz na pytanie. Nie wymyślaj danych o użytkowniku. Zdrowie: tylko ogólne informacje, bez diagnoz i dawek leków/suplementów; przy bólu, urazie, chorobie, ciąży lub zaburzeniach odżywiania — lekarz/dietetyk. Odmawiaj wyłącznie treści niebezpiecznych.` +
+      (ch === "oliwka" ? ` Jesteś małą zajączką: rozmowa bezpieczna dla dzieci — prosty, ciepły, wesoły język, krótkie zdania, zero treści dla dorosłych i przemocy, bez diet i liczenia kalorii; na pytania o wiedzę odpowiadaj prawdziwie i prosto; w ważnych sprawach odsyłaj do rodzica.` : "") +
+      (ctxTxt ? `\nKONTEKST:\n${ctxTxt}` : "");
   }
   function aiMsgs(text) {
     const m = hist.filter((x) => x.who === "me" || x.who === "bot").slice(-AIHIST * 2).map((x) => ({ r: x.who === "me" ? "user" : "model", t: x.text }));
@@ -455,18 +457,67 @@
   }
   let aiNote = "";
   // zwraca Promise<{text, links, mood, ai}>
-  function reply(q, voice) {
+  // v1.3.9: gdy AI jest włączone, KAŻDE pytanie idzie do AI (bez lokalnego dopasowania intencji). Błąd AI nie jest ukrywany ani zastępowany
+  // wymyśloną odpowiedzią: pokazujemy komunikat z kodem technicznym. Odpowiedź offline tylko jako uzupełnienie, gdy pytanie to jasna komenda aplikacji.
+  const isFallback = (o) => !o || o.text === C().fallback;
+  function reply(q, voice, onDelta) {
     const off = () => answer(q);
     const AI = window.TWAI;
-    if (!AI || !AI.enabled()) return Promise.resolve(off());
-    return AI.ask(aiSystem(voice), aiMsgs(q)).then((t) => {
+    if (!AI || !AI.enabled()) { const o = off(); if (isFallback(o) && AI) o.text += " Połącz AI w Ustawieniach (Asystent → klucz), a odpowiem na każde pytanie, jak Gemini."; return Promise.resolve(o); }
+    return AI.ask(aiSystem(voice, q), aiMsgs(q), undefined, onDelta ? (t) => onDelta(String(t || "").replace(/[*_`#]+/g, "")) : undefined).then((t) => {
       t = String(t || "").replace(/[*_`#]+/g, "").trim();
-      if (!t) return off();
+      if (!t) { const e = { code: "empty", detail: "pusta odpowiedź" }; throw Object.assign(new Error("empty"), e); }
       aiNote = ""; const o = off();
       return { text: t, links: (o.links || []).slice(0, 2), mood: o.mood || "happy", ai: true };
-    }).catch((e) => { aiNote = (e && e.code) || "other"; const o = off(); o.err = aiNote; return o; });
+    }).catch((e) => {
+      const code = (e && e.code) || "other", detail = (e && e.detail) || (e && e.code ? "" : "IO: " + String((e && e.name) || "Error"));
+      aiNote = code; const o = off(), msg = AI.errText(code, detail);
+      if (!isFallback(o)) { o.err = code; o.errMsg = msg; return o; } // jasna komenda aplikacji: odpowiedź offline + komunikat o błędzie AI
+      return { text: "Nie udało się uzyskać odpowiedzi AI. " + msg, mood: "neutral", err: code, errMsg: msg, aiFail: true, links: [["#ustawienia", "Ustawienia AI"]] };
+    });
   }
   let sendBusy = 0;
+  // ---------- v1.3.9: obrazy i muzyka (Gemini; obrazy także ChatGPT/Grok) ----------
+  const MEDIA_NOTE = "Obrazy i muzykę generuję w czacie tekstowym — otwórz czat i napisz, co mam stworzyć.";
+  function mediaFile(d) { const ext = /png/.test(d.mime) ? "png" : /jpe?g/.test(d.mime) ? "jpg" : /webp/.test(d.mime) ? "webp" : /wav/.test(d.mime) ? "wav" : /mp3|mpeg/.test(d.mime) ? "mp3" : (String(d.mime).split("/")[1] || "bin").replace(/[^a-z0-9]/gi, ""); return "apexfit-" + (d.kind === "music" ? "muzyka" : "obraz") + "-" + new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "") + "." + ext; }
+  function b64Blob(b64, mime) { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Blob([u], { type: mime }); }
+  function saveMedia(d, btn) {
+    const name = mediaFile(d), b = NB(); let msg;
+    try {
+      if (b && b.saveMedia) { const r = String(b.saveMedia(d.kind, d.mime, d.b64, name) || ""); msg = r.indexOf("OK") === 0 ? (d.kind === "music" ? "Zapisano w Muzyce (ApexFit): " : "Zapisano w Galerii (Zdjęcia/ApexFit): ") + name : "Nie udało się zapisać pliku. [" + r + "]"; }
+      else { const u = URL.createObjectURL(b64Blob(d.b64, d.mime)), a = document.createElement("a"); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 20000); msg = "Pobrano plik: " + name; }
+    } catch (e) { msg = "Nie udało się zapisać pliku. [" + String((e && e.name) || "Error") + "]"; }
+    if (btn) { btn.textContent = msg.indexOf("Nie udało") === 0 ? "Spróbuj ponownie" : "Zapisano ✓"; } return msg;
+  }
+  function mediaEl(d, caption) {
+    const w = document.createElement("div"); w.className = "as-msg bot as-media";
+    const p = document.createElement("p");
+    if (d.kind === "music") { const au = document.createElement("audio"); au.controls = true; au.preload = "auto"; au.src = URL.createObjectURL(b64Blob(d.b64, d.mime)); p.appendChild(au); }
+    else { const im = document.createElement("img"); im.alt = "Wygenerowany obraz"; im.src = "data:" + d.mime + ";base64," + d.b64; p.appendChild(im); }
+    if (caption) { const c = document.createElement("span"); c.className = "as-cap"; c.textContent = caption; p.appendChild(c); }
+    const bt = document.createElement("button"); bt.type = "button"; bt.className = "btn btn-ghost as-save"; bt.textContent = "Zapisz";
+    bt.addEventListener("click", (e) => { e.stopPropagation(); const m = saveMedia(d, bt); const n = document.createElement("div"); n.className = "as-msg bot"; n.innerHTML = "<p></p>"; n.firstChild.textContent = m; w.parentNode && w.parentNode.appendChild(n); const lg = chat && chat.querySelector(".as-log"); if (lg) lg.scrollTop = lg.scrollHeight; });
+    p.appendChild(bt); w.appendChild(p); return w;
+  }
+  async function doMedia(mi, q, typing) {
+    const AI = window.TWAI, ch = charOfDay(), kind = mi.kind, log = chat && chat.querySelector(".as-log");
+    const safe = ch === "oliwka" ? "Treść przyjazna dzieciom: wesoła i bezpieczna, bez przemocy, strachu ani treści dla dorosłych. " : "";
+    const done = () => { if (typing && typing.parentNode) typing.parentNode.removeChild(typing); };
+    try {
+      const d = await AI.media(kind, safe + q, undefined, mi.song);
+      done();
+      if (d.code === "nomedia" || !d.b64) { addMsg("bot", d.text || AI.mediaErrText(kind, "nomedia", ""), null); return; } // model odpowiedział tylko tekstem — pokazujemy go uczciwie
+      d.kind = kind;
+      const cap = (kind === "music" ? "Proszę, oto Twój utwór! " : "Proszę, oto Twój obraz! ") + (d.text && kind === "image" ? d.text : "");
+      const m = { who: "bot", text: kind === "music" ? "(wygenerowano muzykę)" : "(wygenerowano obraz)", links: [] }; hist.push(m); saveHist();
+      if (log) { log.appendChild(mediaEl(d, cap.trim())); if (kind === "music" && d.text) { const l = document.createElement("div"); l.className = "as-msg bot"; l.innerHTML = "<p></p>"; l.firstChild.textContent = d.text; log.appendChild(l); } log.scrollTop = log.scrollHeight; }
+      if (wantVoice()) speak(kind === "music" ? "Proszę, oto Twój utwór!" : "Proszę, oto Twój obraz!");
+    } catch (e) {
+      done(); const code = (e && e.code) || "other";
+      if (code === "nomedia" || (e && e.text)) { addMsg("bot", (e.text || "") || AI.mediaErrText(kind, "nomedia", ""), null); return; }
+      addMsg("bot", (kind === "music" ? "Nie udało się wygenerować muzyki. " : "Nie udało się wygenerować obrazu. ") + (code === "nokey" ? "Brak klucza AI — dodaj go w Ustawieniach." : AI.mediaErrText(kind, code, e.detail)), [["#ustawienia", "Ustawienia AI"]], true);
+    }
+  }
   function send(q) {
     q = String(q || "").trim(); if (!q) return;
     addMsg("me", q);
@@ -474,11 +525,30 @@
     const AI = window.TWAI, useAI = AI && AI.enabled();
     if (log && useAI) { typing = document.createElement("div"); typing.className = "as-msg bot as-typing"; typing.innerHTML = "<p><i></i><i></i><i></i></p>"; log.appendChild(typing); log.scrollTop = log.scrollHeight; }
     const id = ++sendBusy;
-    reply(q, VOICE() && convo).then((r) => {
+    const mi = useAI && AI.mediaIntent ? AI.mediaIntent(q) : null;
+    if (mi) { doMedia(mi, q, typing); return; }
+    // v1.3.9: odpowiedź AI pojawia się w dymku na bieżąco (strumień), a głos rusza po pierwszym zdaniu
+    let live = null; const spk = useAI && wantVoice() ? streamSpeaker(charOfDay()) : null;
+    const onDelta = !useAI ? undefined : (t) => {
+      if (!t) return;
+      if (!live && log) { if (typing && typing.parentNode) typing.parentNode.removeChild(typing); live = msgEl({ who: "bot", text: t, links: [] }); log.appendChild(live); }
+      else if (live) live.firstChild.innerHTML = esc(t).replace(/\n/g, "<br>");
+      if (log) log.scrollTop = log.scrollHeight;
+      if (spk) spk.push(t);
+    };
+    reply(q, VOICE() && convo, onDelta).then((r) => {
       if (typing && typing.parentNode) typing.parentNode.removeChild(typing);
+      if (live && r.ai) { // strumień zakończony: zapisujemy do historii i dopisujemy linki; głos dokończy ostatnie zdanie
+        live.firstChild.innerHTML = esc(r.text).replace(/\n/g, "<br>"); hist.push({ who: "bot", text: r.text, links: r.links || [] }); saveHist();
+        if (r.links && r.links.length) { const lk = document.createElement("div"); lk.className = "as-links"; lk.innerHTML = r.links.map(([h, l]) => `<a href="${esc(h)}" data-as="go">${esc(l)}</a>`).join(""); live.appendChild(lk); }
+        if (r.mood) { const av = chat && chat.querySelector(".as-av"); if (av) av.src = img(charOfDay(), r.mood); }
+        if (log) log.scrollTop = log.scrollHeight;
+        if (spk) spk.end(r.text); else if (wantVoice()) speak(r.text, undefined, true);
+        return;
+      }
+      if (live && live.parentNode) live.parentNode.removeChild(live);
       if (r.mood) { const av = chat && chat.querySelector(".as-av"); if (av) av.src = img(charOfDay(), r.mood); }
-      let note = null;
-      if (r.err && !send.warned) { send.warned = true; note = r.err === "quota" ? "Limit AI wyczerpany — odpowiadam trybem offline." : r.err === "auth" ? "Klucz API nie działa — odpowiadam trybem offline. Sprawdź go w Ustawieniach." : r.err === "timeout" ? "AI odpowiada zbyt wolno — odpowiadam trybem offline." : (r.err === "net" || r.err === "dns" || r.err === "ssl") ? "Nie udało się połączyć z AI — odpowiadam trybem offline. Szczegóły: Ustawienia → Sprawdź połączenie." : "AI chwilowo niedostępne — odpowiadam trybem offline."; }
+      const note = r.errMsg && !r.aiFail ? "Odpowiedź AI niedostępna: " + r.errMsg : null; // błąd AI jest zawsze pokazany (z kodem technicznym)
       setTimeout(() => { addMsg("bot", r.text, r.links); if (note) addMsg("bot", note, null, true); }, useAI ? 0 : 280);
     });
   }
@@ -665,10 +735,19 @@
     listening = false; text = String(text || "").trim();
     if (!text) { speechError(7); return; }
     lastHeard = Date.now(); retry = 0;
+    if (quiet && convo && window.TWAI && TWAI.enabled() && TWAI.mediaIntent && TWAI.mediaIntent(text)) { // obrazy i muzyka tylko w czacie
+      hist.push({ who: "me", text, links: [] }); hist.push({ who: "bot", text: MEDIA_NOTE, links: [] }); saveHist(); speak(MEDIA_NOTE); return;
+    }
     if (quiet && convo) { // bez czatu i bez zapisu tekstu: tylko odpowiedź głosem
       setV("think"); micState(false);
       hist.push({ who: "me", text, links: [] });
-      reply(text, true).then((r) => { hist.push({ who: "bot", text: r.text, links: [] }); saveHist(); if (!convo || !quiet) return; speak(r.text); });
+      const spk = streamSpeaker(charOfDay());
+      reply(text, true, spk ? (t) => { if (convo && quiet) spk.push(t); } : undefined).then((r) => {
+        hist.push({ who: "bot", text: r.text, links: [] }); saveHist(); if (!convo || !quiet) { if (spk && spk.active()) spk.end(r.text); return; }
+        // błąd AI: pokaż dymek z kodem technicznym (bez czatu użytkownik inaczej nic by nie zobaczył), a głosem powiedz tylko krótki opis
+        if (r.err && bub) { bub.textContent = r.text + (r.errMsg && r.aiFail ? "" : " " + (r.errMsg || "")); bub.classList.add("on"); placeBub(); clearTimeout(bubT); bubT = setTimeout(() => bub.classList.remove("on"), 9000); }
+        if (spk && r.ai) spk.end(r.text); else speak(r.aiFail ? r.text.replace(/\s*\[[^\]]*\]/g, "") : r.text, undefined, !r.aiFail);
+      });
       return;
     }
     if (!chat || chat.hidden) openChat();
@@ -709,11 +788,50 @@
       const n = pickVoiceName(list.map((v) => v.name), who); return list.find((v) => v.name === n) || null;
     } catch (e) { return null; }
   }
-  function speak(text, who) {
-    who = who || (typeof charOfDay === "function" ? charOfDay() : "");
-    const t = String(text).replace(/[„”"]/g, "").replace(/\n+/g, ". ").slice(0, 600), b = NB();
-    if (convo || (body && VOICE())) { stopListen(); speaking = true; if (convo) setV("speak"); clearTimeout(speakT); speakT = setTimeout(ttsDone, Math.max(5000, t.length * 95) + 6000); }
-    if (A.mute) { clearTimeout(speakT); speakT = setTimeout(ttsDone, 1200); return; } // wyciszone: bez głosu (tekst i tak widać w czacie/dymku)
+  // ---------- v1.3.9: nagrane głosy trenerów (w aplikacji) + głosy online (Gemini TTS) + głos z telefonu jako zapas ----------
+  const TV = () => window.TWV || null;
+  const nkey = (t) => String(t || "").replace(/[„”"“]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+  // czy cały tekst (albo kolejne zdania) to gotowe nagrania tego trenera? → lista plików albo null
+  function bundledSeq(text, who) {
+    const T = TV(), m = T && T.map && T.map[who]; if (!m) return null;
+    const whole = m[nkey(text)]; if (whole) return [whole];
+    const parts = String(text).match(/[^.!?…]+[.!?…]+["”)]*|[^.!?…]+$/g); if (!parts || parts.length < 2) return null;
+    const ids = []; let i = 0;
+    while (i < parts.length) { let f = null, k = parts.length; for (; k > i; k--) { const id = m[nkey(parts.slice(i, k).join(" "))]; if (id) { f = id; break; } } if (!f) return null; ids.push(f); i = k; }
+    return ids;
+  }
+  let audEl = null, audSeq = 0, ttsBlock = 0, ttsNoted = 0;
+  function stopAudio() { audSeq++; try { if (audEl) { audEl.onended = audEl.onerror = null; audEl.pause(); } } catch (e) { /* brak */ } audEl = null; }
+  // odtwarza kolejno pliki; onEnd po ostatnim; onFail — jeśli plik nie zagra (wtedy mówi głos z telefonu)
+  function playSeq(who, ids, onEnd, onFail) {
+    stopAudio(); const my = audSeq, base = (TV() || {}).base || "audio/"; let k = 0;
+    const fail = () => { if (my === audSeq) { audSeq++; if (onFail) onFail(); } };
+    const next = () => {
+      if (my !== audSeq) return; if (k >= ids.length) { audEl = null; if (onEnd) onEnd(); return; }
+      try { const a = new Audio(base + who + "/" + ids[k++] + ".ogg"); audEl = a; a.onended = next; a.onerror = fail; const pr = a.play(); if (pr && pr.catch) pr.catch(fail); } catch (e) { fail(); }
+    };
+    next();
+  }
+  function onlineOk() { const AI = window.TWAI; return A.online !== false && !A.mute && !!AI && !!AI.tts && AI.hasKey("gemini") && Date.now() >= ttsBlock && navigator.onLine !== false; }
+  function noteOnline(e) {
+    const AI = window.TWAI, code = (e && e.code) || "other"; ttsBlock = Date.now() + (code === "quota" ? 600000 : code === "auth" ? 3600000 : 120000);
+    if (Date.now() - ttsNoted < 600000) return; ttsNoted = Date.now();
+    const msg = "Głos online niedostępny — czytam głosem z telefonu. " + (AI ? (AI.ERR_TXT[code] || AI.ERR_TXT.other) + ((e && e.detail) ? " [" + e.detail + "]" : "") : "");
+    if (chat && !chat.hidden) addMsg("bot", msg, [["#ustawienia", "Ustawienia głosu"]], true); else if (typeof say === "function") say(msg, 6000);
+  }
+  function onlineSpeak(t, who, fallback) {
+    stopAudio(); const my = audSeq;
+    window.TWAI.tts(t, who).then((r) => {
+      if (my !== audSeq) return;
+      const u = URL.createObjectURL(b64Blob(r.b64, r.mime || "audio/wav")), a = new Audio(u); audEl = a;
+      const clean = () => { try { URL.revokeObjectURL(u); } catch (e) { /* brak */ } };
+      a.onended = () => { clean(); if (my === audSeq) { audEl = null; ttsDone(); } };
+      a.onerror = () => { clean(); if (my === audSeq) { audSeq++; fallback(); } };
+      const pr = a.play(); if (pr && pr.catch) pr.catch(() => { clean(); if (my === audSeq) { audSeq++; fallback(); } });
+    }).catch((e) => { if (my !== audSeq) return; audSeq++; noteOnline(e); fallback(); });
+  }
+  function deviceSpeak(t, who, b) {
+    b = b || NB();
     if (b && b.speakAs) { try { b.speakAs(t, who); } catch (e) { ttsDone(); } return; }
     if (b && b.speak) { try { b.speak(t); } catch (e) { ttsDone(); } return; }
     try {
@@ -724,9 +842,67 @@
       } else ttsDone();
     } catch (e) { ttsDone(); }
   }
+  // ai = odpowiedź AI (długa, nagrań nie ma) → głos online, gdy włączony; stałe teksty → nagrania; w ostateczności głos z telefonu
+  function speak(text, who, ai) {
+    who = who || (typeof charOfDay === "function" ? charOfDay() : "");
+    const t = String(text).replace(/[„”"]/g, "").replace(/\n+/g, ". ").slice(0, 900), b = NB();
+    if (convo || (body && VOICE())) { stopListen(); speaking = true; if (convo) setV("speak"); clearTimeout(speakT); speakT = setTimeout(ttsDone, Math.max(5000, t.length * 95) + 12000); }
+    if (A.mute) { clearTimeout(speakT); speakT = setTimeout(ttsDone, 1200); return; } // wyciszone: bez głosu (tekst i tak widać w czacie/dymku)
+    const seq = bundledSeq(text, who);
+    if (seq) { try { if (b && b.stopSpeaking) b.stopSpeaking(); else if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) { /* brak */ } playSeq(who, seq, ttsDone, () => deviceSpeak(t, who, b)); return; }
+    if (ai && onlineOk() && t.length > 1) { try { if (b && b.stopSpeaking) b.stopSpeaking(); } catch (e) { /* brak */ } onlineSpeak(t, who, () => deviceSpeak(t, who, b)); return; }
+    stopAudio(); deviceSpeak(t, who, b);
+  }
+  // komendy głosowe w treningu (start, przerwa, odliczanie, koniec…): nagranie trenera, a gdy go brak — głos z telefonu
+  function cue(kind) {
+    try {
+      if (!A.on || A.mute || A.cues === false) return;
+      const T = TV(), who = charOfDay(), text = T && T.cues && T.cues[who] && T.cues[who][kind]; if (!text) return;
+      const seq = bundledSeq(text, who), dev = () => deviceSpeak(text.replace(/[„”"]/g, ""), who);
+      if (seq) playSeq(who, seq, null, dev); else { stopAudio(); dev(); }
+    } catch (e) { /* brak */ }
+  }
+  // v1.3.9: mówienie zdanie po zdaniu w trakcie strumienia odpowiedzi (pierwsze zdanie rusza, zanim reszta dotrze)
+  function streamSpeaker(who) {
+    if (A.mute) return null;
+    who = who || (typeof charOfDay === "function" ? charOfDay() : "");
+    if (onlineOk()) return { push() { }, end(full) { if (full) speak(full, who, true); }, active() { return false; } }; // głos online czyta całą odpowiedź naraz (po zakończeniu strumienia)
+    const b = NB(), nativeQ = !!(b && b.speakChunk), webQ = !b && !!window.speechSynthesis;
+    let sent = 0, n = 0, lastText = "", lastU = null, over = false;
+    const clean = (t) => String(t).replace(/[„”"]/g, "").replace(/\n+/g, ". ").trim().slice(0, 600);
+    function begin() { if (convo || (body && VOICE())) { stopListen(); speaking = true; if (convo) setV("speak"); } clearTimeout(speakT); speakT = setTimeout(ttsDone, 45000); }
+    function say(chunk, last) {
+      const t = clean(chunk); if (!t) return;
+      if (n === 0) begin(); const first = n++ === 0;
+      try {
+        if (nativeQ) b.speakChunk(t, who, first, !!last);
+        else if (webQ) {
+          const u = new SpeechSynthesisUtterance(t); u.lang = "pl-PL"; u._last = !!last;
+          u.onend = u.onerror = () => { u._d = true; if (u._last) ttsDone(); };
+          const vp = VP[who]; if (vp) { u.pitch = vp.p; u.rate = vp.r; const v = webVoice(who); if (v) { u.voice = v; u.lang = v.lang; } }
+          if (first) speechSynthesis.cancel(); lastU = u; speechSynthesis.speak(u);
+        } else if (last) ttsDone();
+      } catch (e) { ttsDone(); }
+    }
+    return {
+      push(text) {
+        if (over) return; lastText = text; const rest = text.slice(sent), re = /[.!?…]+["”)]*\s+/g; let m, cut = -1;
+        while ((m = re.exec(rest))) cut = m.index + m[0].length;
+        if (cut > 0 && rest.slice(0, cut).trim().length >= 25) { say(rest.slice(0, cut), false); sent += cut; }
+      },
+      end(full) {
+        if (over) return; over = true;
+        const src = lastText || full || "", rest = src.slice(sent);
+        if (clean(rest)) say(rest, true);
+        else if (n > 0) { if (nativeQ) { try { b.speakEnd(); } catch (e) { ttsDone(); } } else if (lastU) { lastU._last = true; if (lastU._d) ttsDone(); } else ttsDone(); }
+        else if (full) speak(full, who);
+      },
+      active() { return n > 0; },
+    };
+  }
   // koniec mówienia (most Androida: UtteranceProgressListener.onDone) → w trybie rozmowy znów słuchamy
   function ttsDone() { clearTimeout(speakT); if (!speaking) return; speaking = false; if (convo) listenSoon(350); else if (el && el.dataset.vst) setQ(""); }
-  function ttsStop() { const b = NB(); try { if (b && b.stopSpeaking) b.stopSpeaking(); else if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) { /* brak */ } }
+  function ttsStop() { stopAudio(); const b = NB(); try { if (b && b.stopSpeaking) b.stopSpeaking(); else if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) { /* brak */ } }
   function ttsError(code) { const was = speaking; ttsDone(); if (quiet && convo && code === 1 && !ttsError.shown) { ttsError.shown = true; convoStop(); say("Brak polskiego głosu do czytania odpowiedzi. Zainstaluj język polski w ustawieniach syntezy mowy Androida."); bub.classList.add("on"); bub.textContent = "Brak polskiego głosu syntezy mowy."; placeBub(); setTimeout(() => bub.classList.remove("on"), 4000); return was; } if (chat && !chat.hidden && !ttsError.shown) { ttsError.shown = true; addMsg("bot", code === 1 ? "Brak polskiego głosu do czytania odpowiedzi. Zainstaluj język polski w ustawieniach syntezy mowy Androida." : "Czytanie odpowiedzi na głos nie jest teraz dostępne.", null, true); } return was; }
   function onBackground() { if (convo) convoStop(); else stopListen(); ttsStop(); }
   document.addEventListener("visibilitychange", () => { if (document.hidden && !NB()) onBackground(); });
@@ -742,6 +918,9 @@
       ${tog("on", "Asystent w aplikacji", isBody() ? "Pływająca postać: przeciągnij, podrzuć w górę, dotknij. Dotknij dwa razy: w trybie głosowym — rozmowa bez okna czatu, w tekstowym — czat." : "Pływająca postać: przeciągnij, podrzuć w górę, dotknij lub przytrzymaj, aby otworzyć czat.", A.on)}
       ${WEBV() ? '<div class="row static"><span class="rtx"><b>Rozmowa</b><small class="as-web-note">Rozmowa głosowa nie jest dostępna w tej przeglądarce (brak rozpoznawania lub syntezy mowy) — piszesz z asystentem w czacie.</small></span></div>' : `<div class="row static col"><span class="rtx"><b>Tryb rozmowy</b><small>${VOICE() ? (isBody() ? "Głosowy: dotknij Zająca dwa razy — słucha, odpowiada głosem i znów słucha, bez okna czatu i bez napisów. Dotknięcie kończy rozmowę; po ok. 45 s ciszy mikrofon wyłączy się sam." : "Głosowy: po otwarciu czatu asystent słucha, odpowiada głosem i znów słucha. Stop kończy rozmowę; po ok. 45 s ciszy mikrofon wyłączy się sam.") : "Tekstowy: piszesz w czacie; mikrofon działa na jedno pytanie."}</small></span><div class="as-seg" role="group" aria-label="Tryb rozmowy">${[["text", "Tekstowy"], ["voice", "Głosowy"]].map(([v, l]) => `<button type="button" data-asmode="${v}" aria-pressed="${A.mode === v}">${l}</button>`).join("")}</div></div>`}
       ${WEBTTS() ? tog("voice", "Odpowiedzi głosowe", VOICE() ? "W trybie głosowym zawsze włączone." : "Asystent czyta odpowiedzi na głos (polski głos syntezy mowy).", wantVoice(), VOICE()) : ""}
+      ${tog("search", "Wyszukiwanie Google w odpowiedziach (Gemini)", "Aktualne informacje z internetu. Wg dokumentacji Google działa tylko z kluczem z rozliczeniami — na darmowym kluczu aplikacja sama wraca do zwykłej odpowiedzi.", !!(window.TWAI && TWAI.search && TWAI.search()))}
+      ${tog("online", "Oryginalne głosy online (Gemini)", "Odpowiedzi AI czytane oryginalnym głosem trenera, generowanym przez Google Gemini (wymaga internetu i klucza Gemini; na darmowym kluczu dzienny limit jest niewielki — gdy się skończy, aplikacja czyta głosem z telefonu i pokazuje krótką informację). Stałe teksty (powitania, reakcje, komendy treningu) mają nagrane głosy i działają offline.", A.online !== false)}
+      ${tog("cues", "Komendy głosowe w treningu", "Trener mówi: start, przerwa, odliczanie 3-2-1, koniec treningu i krótkie słowa motywacji (nagrane głosy; wyciszenie je wyłącza).", A.cues !== false)}
       ${tog("mute", "Wycisz głosy trenerów", "Każdy trener ma własny głos (wysokość i tempo, a gdy telefon ma kilka polskich głosów — osobny głos). Włącz, aby wszystkie odpowiedzi były tylko tekstem.", !!A.mute)}
       ${NB() ? tog("overlay", "Pokaż asystenta na ekranie głównym", ovAvail() ? "Postać widoczna też poza aplikacją. Wymaga zgody „Wyświetlanie nad innymi aplikacjami”; w powiadomieniu jest przycisk „Wyłącz”." : "Dostępne w aplikacji na Androida.", A.overlay && ovAvail(), !ovAvail()) : '<div class="row static"><span class="rtx"><b>Asystent poza aplikacją</b><small class="as-web-note">Pływająca postać nad innymi aplikacjami i mikrofon w tle działają tylko w aplikacji na Androida. Na iPhonie asystent jest aktywny w otwartej aplikacji ApexFit.</small></span></div>'}
     </div></section>${aiSettingsHtml()}`;
@@ -799,7 +978,7 @@
   function aiContext(q) {
     try {
       const AI = window.TWAI, r = answer(String(q || "")), p = AI ? AI.cfg().prov : "gemini";
-      return JSON.stringify({ sys: aiSystem(true), off: String(r.text || "").replace(/[„”"]/g, "").replace(/\n+/g, ". "), m: r.mood || "", prov: p, models: AI ? AI.modelsFor(p) : [], on: !!(AI && AI.cfg().on !== false), name: C().name });
+      return JSON.stringify({ sys: aiSystem(true, q), off: String(r.text || "").replace(/[„”"]/g, "").replace(/\n+/g, ". "), m: r.mood || "", cmd: !isFallback(r), prov: p, models: AI ? AI.modelsFor(p) : [], on: !!(AI && AI.cfg().on !== false), name: C().name });
     } catch (e) { return JSON.stringify({ off: "", m: "" }); }
   }
   function trainersHtml() {
@@ -849,9 +1028,12 @@
     if (k === "on") { A.on = t.checked; save(); sync(); if (A.on) { show("happy", 2500); say(`${C().hi} Jestem!`); } }
     else if (k === "voice") { A.voice = t.checked; save(); if (A.voice) speak(`${C().name} będzie czytać odpowiedzi na głos.`.replace("czytać", her() ? "czytać" : "czytał")); else ttsStop(); }
     else if (k === "overlay") setOverlay(t.checked);
+    else if (k === "search") { if (window.TWAI && TWAI.setSearch) TWAI.setSearch(t.checked); }
+    else if (k === "online") { A.online = t.checked; save(); pushMute(); }
+    else if (k === "cues") { A.cues = t.checked; save(); }
     else if (k === "mute") { A.mute = t.checked; save(); if (A.mute) ttsStop(); pushMute(); }
   });
-  function pushMute() { const b = NB(); try { if (b && b.setMute) b.setMute(!!A.mute); } catch (e) { /* brak */ } }
+  function pushMute() { const b = NB(); try { if (b && b.setMute) b.setMute(!!A.mute); if (b && b.setOnlineVoice) b.setOnlineVoice(A.online !== false); } catch (e) { /* brak */ } }
   // podgląd głosu trenera (przycisk „Test głosu” w Poznaj trenerów)
   function voiceTest(who) {
     const c = CHARS[who]; if (!c || !VP[who]) return;
@@ -880,7 +1062,7 @@
 
   // v1.3.4: odpowiedź tekstowa dla asystenta na ekranie głównym (usługa Androida pyta przez ukryty WebView)
   function answerPlain(q) { try { const r = answer(String(q || "")); return JSON.stringify({ t: String(r.text || "").replace(/[„”"]/g, "").replace(/\n+/g, ". "), m: r.mood || "" }); } catch (e) { return JSON.stringify({ t: "", m: "" }); } }
-  window.TWA = { answerPlain, aiContext, reply, quietActive: () => quiet && convo, charOfDay, rotation, settingsHtml, trainersHtml, setTrainer, openChat, closeChat, answer, baseMood, onSpeech, onSpeechError: speechError, onSpeechEnd: () => { listening = false; micState(false); }, onTtsError: ttsError, onTtsDone: ttsDone, onListenReady: () => { if (convo) setV("listen"); }, onBackground, onResume, setMode, state: () => A,
+  window.TWA = { cue, answerPlain, aiContext, reply, quietActive: () => quiet && convo, charOfDay, rotation, settingsHtml, trainersHtml, setTrainer, openChat, closeChat, answer, baseMood, onSpeech, onSpeechError: speechError, onSpeechEnd: () => { listening = false; micState(false); }, onTtsError: ttsError, onTtsDone: ttsDone, onListenReady: () => { if (convo) setV("listen"); }, onBackground, onResume, setMode, state: () => A,
     emit: (type, x) => onAppEvent({ detail: Object.assign({ type }, x || {}) }) };
   window.addEventListener("tw:event", onAppEvent);
   function boot() {
@@ -890,7 +1072,7 @@
     try { if (b && b.consumeOpenChat && b.consumeOpenChat()) setTimeout(openChat, 300); } catch (e) { /* brak */ }
     try { if (b && b.overlayEnabled && b.overlayEnabled() !== A.overlay) { A.overlay = !!b.overlayEnabled(); save(); } } catch (e) { /* brak */ }
     try { if (b && b.setAsstMode) b.setAsstMode(A.mode === "voice" ? "voice" : "text"); } catch (e) { /* brak */ }
-    pushMute();
+    pushMute(); try { if (window.TWAI && TWAI.setSearch) TWAI.setSearch(TWAI.search()); } catch (e) { /* brak */ }
     if (/[?&]czat\b/.test(location.search) || location.hash === "#czat") setTimeout(openChat, 300);
     { const qp = new URLSearchParams(location.search), qa = qp.get("ask");
       if (qp.get("stubai")) window.__stubReply = (q) => `${C().hi} ${/trening|dzis|dziś/i.test(q) ? "Dziś masz trening nóg — zacznij od 12 minut rozgrzewki, a ja będę Ci kibicować przy każdej serii." : "Dobre pytanie! Krótko: słuchaj swojego ciała, jedz regularnie i nie zapominaj o wodzie."}`;

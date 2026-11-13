@@ -113,3 +113,9 @@ body.as-chat-open { overflow: hidden; }
 
 /* v1.3.8 — natychmiastowa reakcja wizualna na dotyk postaci */
 .as-fab.as-press img { filter: brightness(1.18) drop-shadow(0 0 10px rgba(255, 255, 255, .55)) drop-shadow(0 4px 5px rgba(0, 0, 0, .45)); }
+/* v1.3.9: obrazy i muzyka w czacie */
+.as-media p { display: flex; flex-direction: column; gap: 8px; }
+.as-media img { display: block; width: 100%; max-width: 320px; border-radius: 12px; }
+.as-media audio { width: 100%; min-width: 220px; }
+.as-media .as-cap { font-size: .9rem; }
+.as-media .as-save { align-self: flex-start; min-height: 38px; padding: 6px 16px; }

@@ -601,6 +601,9 @@
   // ---------- Tryb treningu (pełny ekran) ----------
   let WK = load(WK_KEY); if (!WK.steps) WK = null;
   const saveWK = () => { try { if (WK) localStorage.setItem(WK_KEY, JSON.stringify(WK)); else localStorage.removeItem(WK_KEY); } catch (e) { /* brak */ } };
+  // v1.3.9: komendy głosowe trenera w treningu (nagrane głosy; patrz assistant.js → TWA.cue)
+  const cue = (k) => { try { if (window.TWA && window.TWA.cue) window.TWA.cue(k); } catch (e) { /* brak */ } };
+  let cdLast = 99, mvN = 0;
   let AC = null;
   function beep(n) {
     try {
@@ -626,7 +629,7 @@
   const isSessionRoute = () => /^#trening\/sesja\//.test(location.hash);
   function startSession(di) {
     WK = { di, w: S.week - 1, steps: buildSession(di, S.week - 1), i: 0, t0: Date.now(), done: [], restEnd: null, iv: null, finished: false };
-    saveWK();
+    saveWK(); cue("start");
   }
   function prefill(st) {
     const mine = WK.done.filter((x) => x.ex === st.ex);
@@ -655,7 +658,7 @@
       body = `<div class="ws-body"><div class="ws-hero">${I.fire}<h1>Rozgrzewka</h1><p class="caption">Ok. 12 minut — przygotuj stawy i mięśnie.</p></div>${warmList()}</div>
         <div class="ws-foot"><button type="button" class="btn-primary big" data-wk="next">${I.check}<span>Rozgrzewka zrobiona</span></button></div>`;
     } else if (st.type === "done") {
-      if (!WK.finished) { WK.finished = true; WK.t1 = Date.now(); LOG.sessions.push({ t: WK.t0, di, w: WK.w, dur: Math.round((WK.t1 - WK.t0) / 1000), sets: WK.done.length }); saveLog(); saveWK(); wake(false); emit("workout-done", { di }); }
+      if (!WK.finished) { WK.finished = true; WK.t1 = Date.now(); LOG.sessions.push({ t: WK.t0, di, w: WK.w, dur: Math.round((WK.t1 - WK.t0) / 1000), sets: WK.done.length }); saveLog(); saveWK(); wake(false); emit("workout-done", { di }); cue("finish"); }
       const byEx = {}; WK.done.forEach((x) => { (byEx[x.ex] = byEx[x.ex] || []).push(x); });
       body = `<div class="ws-body"><div class="ws-hero done">${I.check}<h1>Trening ukończony!</h1><p class="caption">${esc(d.full)} · tydzień ${WK.w + 1}</p></div>
         <div class="metrics"><div class="metric main"><b>${fmtTime((WK.t1 - WK.t0) / 1000)}</b><span>Czas</span></div><div class="metric"><b>${WK.done.length}</b><span>Serie zrobione</span></div><div class="metric"><b>${Object.keys(byEx).length}</b><span>Ćwiczenia</span></div></div>
@@ -699,6 +702,7 @@
       WK.i = Math.min(WK.steps.length - 1, WK.i + 1);
       const nx = WK.steps[WK.i];
       WK.restEnd = st.rest && nx.type !== "done" ? Date.now() + st.rest * 1000 : null;
+      cdLast = 99; if (WK.restEnd) cue("rest");
       buzz(30);
       if (!AC) beep(0);
     }
@@ -714,13 +718,14 @@
     const st = WK.steps[WK.i];
     if (WK.restEnd) {
       const left = (WK.restEnd - Date.now()) / 1000, el = document.getElementById("wk-timer");
-      if (left <= 0) { WK.restEnd = null; saveWK(); beep(2); render(); return; }
+      if (left <= 0) { WK.restEnd = null; saveWK(); beep(2); cue(++mvN % 3 === 0 ? "m" + (1 + (mvN / 3 | 0) % 3) : "restend"); render(); return; }
+      { const c = Math.ceil(left); if (c <= 3 && c >= 1 && c < cdLast) { cdLast = c; cue("cd" + c); } else if (c > 3) cdLast = 99; }
       if (el) el.textContent = fmtTime(left);
     } else if (st && st.type === "interval" && WK.iv) {
       const el = (Date.now() - WK.iv.start) / 1000, cyc = st.work + st.rest, round = Math.floor(el / cyc) + 1;
       if (round > st.rounds) { beep(3); WK.iv = null; WK.i = Math.min(WK.steps.length - 1, WK.i + 1); saveWK(); render(); return; }
       const inWork = el % cyc < st.work, left = inWork ? st.work - (el % cyc) : cyc - (el % cyc), ph = (inWork ? "w" : "r") + round;
-      if (WK.iv.last && WK.iv.last !== ph) beep(1);
+      if (WK.iv.last && WK.iv.last !== ph) { beep(1); cue(inWork ? "work" : "relax"); }
       WK.iv.last = ph;
       const P = document.getElementById("wk-iv-phase"), T = document.getElementById("wk-iv-time"), N = document.getElementById("wk-iv-info");
       if (P) P.textContent = inWork ? "PRACA" : "PRZERWA"; if (T) T.textContent = fmtTime(left); if (N) N.textContent = `Runda ${round} z ${st.rounds}`;
