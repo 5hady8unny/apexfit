@@ -110,3 +110,6 @@ body.as-chat-open { overflow: hidden; }
 @keyframes as-typ { 0%, 80%, 100% { opacity: .25; transform: scale(.8); } 40% { opacity: 1; transform: scale(1.1); } }
 .as-in, .as-mic, .as-send { min-height: 46px; }
 .ai-msg:empty, .ai-btns:empty { display: none; }
+
+/* v1.3.8 — natychmiastowa reakcja wizualna na dotyk postaci */
+.as-fab.as-press img { filter: brightness(1.18) drop-shadow(0 0 10px rgba(255, 255, 255, .55)) drop-shadow(0 4px 5px rgba(0, 0, 0, .45)); }

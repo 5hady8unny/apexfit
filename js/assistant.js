@@ -41,7 +41,7 @@
       tap: ["Hej, hej! Pobawimy się w trening?", "Hop, hop! Jesteś super!", "Przytrzymaj mnie, to pogadamy!", "Piątka! Dasz radę!"],
       fallback: "Ojej, nie wiem, o co chodzi! Zapytaj mnie o trening na dziś, o jedzonko, kalorie albo jakieś ćwiczenie!" },
   };
-  const def = { on: true, voice: false, mode: "text", overlay: false, pos: null, bx: null, first: 0, trainer: { m: "auto", k: "auto" } };
+  const def = { on: true, voice: false, mute: false, mode: "text", overlay: false, pos: null, bx: null, first: 0, trainer: { m: "auto", k: "auto" } };
   let A = Object.assign({}, def, load(KEY));
   A.trainer = Object.assign({ m: "auto", k: "auto" }, A.trainer || {});
   const ROSTER = { m: ["rico", "pitbull", "zajac"], k: ["atena", "lapka", "marta", "oliwka"] };
@@ -247,7 +247,7 @@
   function say(text, ms) {
     if (!bub || !text) return;
     // v1.3.4: Zając w trybie głosowym — bez dymków z tekstem, tylko mówi (w trakcie rozmowy nie przerywa)
-    if (body && VOICE()) { bub.classList.remove("on"); if (!convo && !el.hidden) speak(text); return; }
+    if (body && VOICE() && !A.mute) { bub.classList.remove("on"); if (!convo && !el.hidden) speak(text); return; }
     bub.textContent = text; bub.classList.add("on"); placeBub();
     clearTimeout(bubT); bubT = setTimeout(() => bub.classList.remove("on"), ms || 3200);
   }
@@ -278,14 +278,16 @@
     else { bub.style.bottom = ""; bub.style.top = (hb + 6) + "px"; bub.style.maxHeight = Math.max(64, nt - hb - 20) + "px"; }
   }
   function bindDrag() {
-    let st = null, lp = null, taps = 0, tapT = null, track = [];
+    let st = null, lp = null, taps = 0, tapT = null, track = [], lastPtr = 0;
     el.addEventListener("pointerdown", (e) => {
       if (e.button) return;
-      el.setPointerCapture(e.pointerId); lastAct = Date.now();
+      // v1.3.8: setPointerCapture potrafi rzucić wyjątek w WebView (wtedy dotyk w ogóle nie był obsługiwany) — nie może blokować reakcji
+      try { el.setPointerCapture(e.pointerId); } catch (err) { /* brak przechwytu — działamy dalej */ }
+      lastAct = Date.now(); lastPtr = Date.now(); el.classList.add("as-press"); if (body) buzz(8);
       st = { x: e.clientX, y: e.clientY, p: Object.assign({}, el._p), drag: false, long: false };
       track = [{ x: e.clientX, y: e.clientY, t: e.timeStamp }];
-      // v1.3.4: Zając — przytrzymanie w aplikacji nic nie otwiera (można przeciągać); pozostali — przytrzymaj, aby otworzyć czat
-      clearTimeout(lp); if (!body) lp = setTimeout(() => { if (st && !st.drag) { st.long = true; buzz(25); openChat(); } }, 550);
+      // v1.3.8: przytrzymanie (bez przesuwania) otwiera czat lub rozmowę głosową; przesunięcie > 9 px = przeciąganie postaci
+      clearTimeout(lp); lp = setTimeout(() => { if (st && !st.drag) { st.long = true; el.classList.remove("as-press"); buzz(25); if (body) { if (quiet && convo) convoStop(); else doubleTap(); } else openChat(); } }, 550);
     });
     el.addEventListener("pointermove", (e) => {
       if (!st) return;
@@ -296,7 +298,7 @@
     });
     const end = (e, cancel) => {
       if (!st) return; clearTimeout(lp); lastAct = Date.now();
-      const s = st; st = null; el.classList.remove("drag");
+      const s = st; st = null; lastPtr = Date.now(); el.classList.remove("drag"); el.classList.remove("as-press");
       if (s.long) return;
       if (s.drag) {
         const a = track[0], b = track[track.length - 1], dt = Math.max(1, b.t - a.t), vy = (b.y - a.y) / dt, vx = (b.x - a.x) / dt;
@@ -326,6 +328,11 @@
     el.addEventListener("pointerup", (e) => end(e, false));
     el.addEventListener("pointercancel", (e) => end(e, true));
     el.addEventListener("contextmenu", (e) => e.preventDefault());
+    // v1.3.8: awaryjnie — gdy przeglądarka nie dostarczyła zdarzeń pointer (np. WebView), a dotknięcie dało „click”, traktuj je jak krótkie dotknięcie
+    el.addEventListener("click", (e) => {
+      if (Date.now() - lastPtr < 900) return;
+      lastPtr = Date.now(); st = { x: 0, y: 0, p: Object.assign({}, el._p), drag: false, long: false }; track = [{ x: 0, y: 0, t: 0 }]; end(e, false);
+    });
   }
   const TAP_MS = 280;
   function onTaps(n) {
@@ -684,13 +691,37 @@
     const t = STT_ERR[code] || "Rozpoznawanie mowy nie zadziałało — spróbuj jeszcze raz albo napisz."; if (chat && !chat.hidden) addMsg("bot", t, null, true); else say(t);
   }
   function speakThen(text) { speak(text); }
-  function speak(text) {
+  // v1.3.8: własny głos każdego trenera — wysokość (p) i tempo (r) + osobny polski głos, jeśli system ma ich kilka
+  const VP = { rico: { p: 0.75, r: 0.95, i: 0 }, pitbull: { p: 0.65, r: 0.9, i: 1 }, zajac: { p: 0.95, r: 1.15, i: 2 }, atena: { p: 1.05, r: 1, i: 0 }, lapka: { p: 1.2, r: 1.05, i: 1 }, marta: { p: 1, r: 0.95, i: 2 }, oliwka: { p: 1.5, r: 1.1, i: 3 } };
+  const isFem = (n) => /female|zosia|ewa|paulina|agnieszka|maja|-afb|-oda|-zfg|-pla/i.test(n);
+  const isMal = (n) => !isFem(n) && /\bmale\b|krzysztof|marek|adam|jacek|filip|mateusz|-bmg|-jmk|-pld/i.test(n);
+  function pickVoiceName(names, who) {
+    if (!names || !names.length || !VP[who]) return null;
+    const m = CHARS[who] && CHARS[who].g === "m"; let pool = names.filter((n) => (m ? isMal(n) : isFem(n)));
+    if (!pool.length) pool = names.slice(); pool.sort();
+    return pool[VP[who].i % pool.length];
+  }
+  function webVoice(who) {
+    try {
+      const vs = (window.speechSynthesis.getVoices() || []).filter((v) => /^pl/i.test(v.lang));
+      if (!vs.length) return null;
+      const off = vs.filter((v) => v.localService !== false), list = off.length ? off : vs;
+      const n = pickVoiceName(list.map((v) => v.name), who); return list.find((v) => v.name === n) || null;
+    } catch (e) { return null; }
+  }
+  function speak(text, who) {
+    who = who || (typeof charOfDay === "function" ? charOfDay() : "");
     const t = String(text).replace(/[„”"]/g, "").replace(/\n+/g, ". ").slice(0, 600), b = NB();
     if (convo || (body && VOICE())) { stopListen(); speaking = true; if (convo) setV("speak"); clearTimeout(speakT); speakT = setTimeout(ttsDone, Math.max(5000, t.length * 95) + 6000); }
+    if (A.mute) { clearTimeout(speakT); speakT = setTimeout(ttsDone, 1200); return; } // wyciszone: bez głosu (tekst i tak widać w czacie/dymku)
+    if (b && b.speakAs) { try { b.speakAs(t, who); } catch (e) { ttsDone(); } return; }
     if (b && b.speak) { try { b.speak(t); } catch (e) { ttsDone(); } return; }
     try {
-      if (window.speechSynthesis) { const u = new SpeechSynthesisUtterance(t); u.lang = "pl-PL"; u.onend = ttsDone; u.onerror = ttsDone; speechSynthesis.cancel(); speechSynthesis.speak(u); }
-      else ttsDone();
+      if (window.speechSynthesis) {
+        const u = new SpeechSynthesisUtterance(t); u.lang = "pl-PL"; u.onend = ttsDone; u.onerror = ttsDone;
+        const vp = VP[who]; if (vp) { u.pitch = vp.p; u.rate = vp.r; const v = webVoice(who); if (v) { u.voice = v; u.lang = v.lang; } }
+        speechSynthesis.cancel(); speechSynthesis.speak(u);
+      } else ttsDone();
     } catch (e) { ttsDone(); }
   }
   // koniec mówienia (most Androida: UtteranceProgressListener.onDone) → w trybie rozmowy znów słuchamy
@@ -711,6 +742,7 @@
       ${tog("on", "Asystent w aplikacji", isBody() ? "Pływająca postać: przeciągnij, podrzuć w górę, dotknij. Dotknij dwa razy: w trybie głosowym — rozmowa bez okna czatu, w tekstowym — czat." : "Pływająca postać: przeciągnij, podrzuć w górę, dotknij lub przytrzymaj, aby otworzyć czat.", A.on)}
       ${WEBV() ? '<div class="row static"><span class="rtx"><b>Rozmowa</b><small class="as-web-note">Rozmowa głosowa nie jest dostępna w tej przeglądarce (brak rozpoznawania lub syntezy mowy) — piszesz z asystentem w czacie.</small></span></div>' : `<div class="row static col"><span class="rtx"><b>Tryb rozmowy</b><small>${VOICE() ? (isBody() ? "Głosowy: dotknij Zająca dwa razy — słucha, odpowiada głosem i znów słucha, bez okna czatu i bez napisów. Dotknięcie kończy rozmowę; po ok. 45 s ciszy mikrofon wyłączy się sam." : "Głosowy: po otwarciu czatu asystent słucha, odpowiada głosem i znów słucha. Stop kończy rozmowę; po ok. 45 s ciszy mikrofon wyłączy się sam.") : "Tekstowy: piszesz w czacie; mikrofon działa na jedno pytanie."}</small></span><div class="as-seg" role="group" aria-label="Tryb rozmowy">${[["text", "Tekstowy"], ["voice", "Głosowy"]].map(([v, l]) => `<button type="button" data-asmode="${v}" aria-pressed="${A.mode === v}">${l}</button>`).join("")}</div></div>`}
       ${WEBTTS() ? tog("voice", "Odpowiedzi głosowe", VOICE() ? "W trybie głosowym zawsze włączone." : "Asystent czyta odpowiedzi na głos (polski głos syntezy mowy).", wantVoice(), VOICE()) : ""}
+      ${tog("mute", "Wycisz głosy trenerów", "Każdy trener ma własny głos (wysokość i tempo, a gdy telefon ma kilka polskich głosów — osobny głos). Włącz, aby wszystkie odpowiedzi były tylko tekstem.", !!A.mute)}
       ${NB() ? tog("overlay", "Pokaż asystenta na ekranie głównym", ovAvail() ? "Postać widoczna też poza aplikacją. Wymaga zgody „Wyświetlanie nad innymi aplikacjami”; w powiadomieniu jest przycisk „Wyłącz”." : "Dostępne w aplikacji na Androida.", A.overlay && ovAvail(), !ovAvail()) : '<div class="row static"><span class="rtx"><b>Asystent poza aplikacją</b><small class="as-web-note">Pływająca postać nad innymi aplikacjami i mikrofon w tle działają tylko w aplikacji na Androida. Na iPhonie asystent jest aktywny w otwartej aplikacji ApexFit.</small></span></div>'}
     </div></section>${aiSettingsHtml()}`;
   }
@@ -775,7 +807,7 @@
     return `<p class="caption">Rotacja dnia: ${rotText(sx)}. Możesz też wybrać stałego trenera w Ustawieniach → Asystent → Trener.</p>
       <div class="as-trainers">${ROSTER[sx].map((x) => { const c = CHARS[x]; return `<article class="card as-tr"><img class="as-tr-img" src="img/trenerzy/${x}.jpg" alt="${esc(c.name)} — ${esc(c.who)}, trener w aplikacji" loading="lazy">
         <div class="as-tr-t"><h2>${esc(c.name)}${x === today ? ' <span class="badge">dziś</span>' : ""}${A.trainer[sx] === x ? ' <span class="badge alt">wybrany</span>' : ""}</h2><p class="caption">${esc(c.who)} · ${esc(c.style)}</p><p>${esc(c.about)}</p>
-        <div class="alt-act"><button type="button" class="btn-ghost" data-trainer="${x}" data-trainer-chat>Wybierz i porozmawiaj</button></div></div></article>`; }).join("")}</div>`;
+        <div class="alt-act"><button type="button" class="btn-ghost" data-trainer="${x}" data-trainer-chat>Wybierz i porozmawiaj</button><button type="button" class="btn-ghost" data-voice-test="${x}">Test głosu</button></div></div></article>`; }).join("")}</div>`;
   }
   function setTrainer(v) {
     const sx = sex(); if (v !== "auto" && !ROSTER[sx].includes(v)) return;
@@ -817,10 +849,20 @@
     if (k === "on") { A.on = t.checked; save(); sync(); if (A.on) { show("happy", 2500); say(`${C().hi} Jestem!`); } }
     else if (k === "voice") { A.voice = t.checked; save(); if (A.voice) speak(`${C().name} będzie czytać odpowiedzi na głos.`.replace("czytać", her() ? "czytać" : "czytał")); else ttsStop(); }
     else if (k === "overlay") setOverlay(t.checked);
+    else if (k === "mute") { A.mute = t.checked; save(); if (A.mute) ttsStop(); pushMute(); }
   });
+  function pushMute() { const b = NB(); try { if (b && b.setMute) b.setMute(!!A.mute); } catch (e) { /* brak */ } }
+  // podgląd głosu trenera (przycisk „Test głosu” w Poznaj trenerów)
+  function voiceTest(who) {
+    const c = CHARS[who]; if (!c || !VP[who]) return;
+    if (A.mute) { say("Głosy są wyciszone — włącz je w Ustawienia → Asystent → „Wycisz głosy trenerów”.", 4200); return; }
+    ttsStop(); speak(`${c.hi} Tak brzmi mój głos. Razem zrobimy świetny trening!`, who);
+  }
   document.addEventListener("click", (e) => {
     if (!e.target.closest) return;
     const tb = e.target.closest("[data-trainer]");
+    const vt = e.target.closest("[data-voice-test]");
+    if (vt) { voiceTest(vt.dataset.voiceTest); return; }
     if (tb) { setTrainer(tb.dataset.trainer); if (tb.hasAttribute("data-trainer-chat")) { hist = []; saveHist(); openChat(); } return; }
     const mb = e.target.closest("[data-asmode]");
     if (mb) { setMode(mb.dataset.asmode); return; }
@@ -848,6 +890,7 @@
     try { if (b && b.consumeOpenChat && b.consumeOpenChat()) setTimeout(openChat, 300); } catch (e) { /* brak */ }
     try { if (b && b.overlayEnabled && b.overlayEnabled() !== A.overlay) { A.overlay = !!b.overlayEnabled(); save(); } } catch (e) { /* brak */ }
     try { if (b && b.setAsstMode) b.setAsstMode(A.mode === "voice" ? "voice" : "text"); } catch (e) { /* brak */ }
+    pushMute();
     if (/[?&]czat\b/.test(location.search) || location.hash === "#czat") setTimeout(openChat, 300);
     { const qp = new URLSearchParams(location.search), qa = qp.get("ask");
       if (qp.get("stubai")) window.__stubReply = (q) => `${C().hi} ${/trening|dzis|dziś/i.test(q) ? "Dziś masz trening nóg — zacznij od 12 minut rozgrzewki, a ja będę Ci kibicować przy każdej serii." : "Dobre pytanie! Krótko: słuchaj swojego ciała, jedz regularnie i nie zapominaj o wodzie."}`;
